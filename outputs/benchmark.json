@@ -1,0 +1,23 @@
+{
+  "rows": 500000,
+  "median_seconds": {
+    "original": 46.99,
+    "optimized": 1.06
+  },
+  "runs": {
+    "original": [
+      50.27,
+      46.99,
+      46.41
+    ],
+    "optimized": [
+      1.58,
+      0.99,
+      1.06
+    ]
+  },
+  "speedup": 44.3,
+  "time_saved_pct": 97.7,
+  "same_results": true,
+  "spark_version": "4.2.0"
+}
