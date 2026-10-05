@@ -9,4 +9,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install numpy fastapi uvicorn pydantic pytest httpx
-      - run: pytest -q
+      - run: python -m pytest -q
