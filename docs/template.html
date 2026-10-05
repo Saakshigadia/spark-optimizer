@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spark Optimization &amp; Capacity Planning | Demo</title>
+<meta name="description" content="Find slow patterns in PySpark and SQL, size Spark executors for an SLA, and forecast storage growth.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1c1d21;--mu:#666a73;--line:#e3e1db;--acc:#e25a1c;--acc-2:#c94a10;--ok:#1f8a5b;--hi:#c2341b;--md:#b7791f;--lo:#5a6b85;--code:#1b1d23;--code-ink:#e6e6e6;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131417;--card:#1c1d22;--ink:#ecebe7;--mu:#a1a3aa;--line:#2c2e35;--acc:#f07a3e;--acc-2:#ff8f55;--code:#0e0f12}}
+:root[data-theme="dark"]{--bg:#131417;--card:#1c1d22;--ink:#ecebe7;--mu:#a1a3aa;--line:#2c2e35;--acc:#f07a3e;--acc-2:#ff8f55;--code:#0e0f12}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1120px;margin:0 auto;padding:30px 20px 50px}
+h1{font-size:clamp(26px,4.2vw,40px);line-height:1.12;margin:0 0 10px;letter-spacing:-.01em}
+.intro{color:var(--mu);max-width:680px;margin:0 0 22px}
+.bench{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:10px;padding:14px 18px;margin:0 0 24px}
+.bench b{font-size:22px}.bench span{color:var(--mu);font-size:13px;display:block}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:20px;overflow-x:auto}
+.tabs button{font:inherit;font-weight:600;background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;color:var(--mu);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--acc)}
+.panel{display:none}.panel.on{display:block}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font-size:16px;margin:0 0 12px}
+textarea{width:100%;min-height:360px;resize:vertical;font:13px/1.55 "IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;background:var(--code);color:var(--code-ink);border:0;border-radius:8px;padding:14px;tab-size:4}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+.btn{font:inherit;font-weight:600;font-size:14px;border-radius:7px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}.btn.primary:hover{background:var(--acc-2)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.score{display:flex;align-items:baseline;gap:10px;margin:0 0 12px}.score b{font-size:34px}
+.finding{border-top:1px solid var(--line);padding:10px 0}
+.finding h3{font-size:14px;margin:0 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.finding p{margin:2px 0;font-size:13.5px;color:var(--mu)}.finding p b{color:var(--ink);font-weight:600}
+.sev{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:4px;color:#fff}
+.sev.high{background:var(--hi)}.sev.medium{background:var(--md)}.sev.low{background:var(--lo)}
+.ln{font:12px "IBM Plex Mono",monospace;color:var(--mu)}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--mu)}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:0 10px;height:40px;width:100%}
+.kv{width:100%;border-collapse:collapse;font-size:14px}
+.kv td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.kv td:first-child{color:var(--mu);width:46%}
+.kv td:last-child{font:13px "IBM Plex Mono",monospace;text-align:right;word-break:break-all}
+.pill{display:inline-block;font-weight:700;font-size:13px;padding:3px 10px;border-radius:99px}
+.pill.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.pill.bad{background:color-mix(in srgb,var(--hi) 15%,transparent);color:var(--hi)}
+pre{background:var(--code);color:var(--code-ink);font:12px/1.6 "IBM Plex Mono",monospace;padding:12px;border-radius:8px;overflow-x:auto;white-space:pre}
+ul.notes{padding-left:18px;margin:10px 0;font-size:14px}ul.notes li{margin:4px 0}
+.chart{width:100%;height:auto;display:block}
+.chart text{font:11px "IBM Plex Sans",sans-serif;fill:var(--mu)}
+.advice{font-weight:600;margin:12px 0 0}
+.note{font-size:12.5px;color:var(--mu);margin:10px 0 0}
+footer{margin-top:30px;color:var(--mu);font-size:13px}footer a{color:var(--ink)}
+@media(max-width:860px){.grid{grid-template-columns:1fr}textarea{min-height:260px}}
+@media(max-width:480px){.form{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<h1>Spark Optimization &amp; Capacity Planning</h1>
+<p class="intro">Paste a PySpark job or a Spark SQL query to find what makes it slow, size a cluster for your SLA, and forecast when storage runs out.</p>
+
+<div class="bench" id="bench"></div>
+
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="an">Code analyser</button>
+  <button role="tab" aria-selected="false" data-tab="op">Resource optimizer</button>
+  <button role="tab" aria-selected="false" data-tab="ca">Capacity planner</button>
+</div>
+
+<!-- ============ analyser ============ -->
+<section class="panel on" id="an">
+  <div class="grid">
+    <div class="card">
+      <h2>Your code</h2>
+      <textarea id="code" spellcheck="false" aria-label="PySpark or SQL code"></textarea>
+      <div class="row">
+        <button class="btn primary" id="run">Analyse</button>
+        <button class="btn" data-sample="py">Sample PySpark job</button>
+        <button class="btn" data-sample="sql">Sample SQL query</button>
+        <button class="btn" data-sample="good">Optimised version</button>
+      </div>
+    </div>
+    <div class="card" id="findings" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- ============ optimizer ============ -->
+<section class="panel" id="op">
+  <div class="grid">
+    <div class="card">
+      <h2>Cluster and workload</h2>
+      <div class="form">
+        <label>Nodes<input type="number" id="nodes" value="6" min="1"></label>
+        <label>Cores per node<input type="number" id="cores" value="16" min="1"></label>
+        <label>Memory per node (GB)<input type="number" id="mem" value="64" min="2"></label>
+        <label>Input data (GB)<input type="number" id="gb" value="500" min="1"></label>
+        <label>Job type<select id="job"><option value="etl">ETL</option><option value="aggregation">Aggregation</option><option value="join" selected>Join-heavy</option><option value="ml">Machine learning</option></select></label>
+        <label>SLA (minutes)<input type="number" id="sla" value="30" min="1"></label>
+      </div>
+      <p class="note">Runtime is a rough throughput model. Calibrate it with timings from your own jobs.</p>
+    </div>
+    <div class="card" id="opOut"></div>
+  </div>
+</section>
+
+<!-- ============ capacity ============ -->
+<section class="panel" id="ca">
+  <div class="grid">
+    <div class="card">
+      <h2>Storage policy</h2>
+      <div class="form">
+        <label>Forecast (months)<input type="number" id="months" value="12" min="1" max="36"></label>
+        <label>Retention (days)<input type="number" id="ret" value="365" min="1"></label>
+        <label>Compression ratio<input type="number" id="comp" value="3" min="1" step="0.5"></label>
+        <label>Replication<select id="rep"><option value="3">3 (HDFS)</option><option value="1">1 (S3 / GCS / ADLS)</option></select></label>
+        <label>Capacity (TB)<input type="number" id="cap" value="160" min="1"></label>
+        <label>Warn at (% full)<input type="number" id="warn" value="80" min="10" max="100"></label>
+      </div>
+      <p class="note">Uses 18 months of sample daily ingestion. The tool fits linear and exponential growth and keeps whichever predicts held-out data better.</p>
+    </div>
+    <div class="card" id="caOut"></div>
+  </div>
+</section>
+
+<footer>Built by Saakshi Gadia with Python, PySpark and FastAPI. This browser demo uses simplified pattern matching; the Python tool parses code with an AST. <a href="https://github.com/Saakshigadia">GitHub</a></footer>
+</main>
+
+<script>
+const DATA = /*__DATA__*/{};
+
+// ---------------- tabs
+document.querySelectorAll('[role=tab]').forEach(t => t.onclick = () => {
+  document.querySelectorAll('[role=tab]').forEach(x => x.setAttribute('aria-selected', x === t));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === t.dataset.tab));
+});
+
+// ---------------- benchmark banner
+(() => {
+  const b = DATA.benchmark, el = document.getElementById('bench');
+  if (!b) { el.remove(); return; }
+  el.innerHTML = `<div><b>${b.median_seconds.original}s → ${b.median_seconds.optimized}s</b><span>Sample job runtime, before → after</span></div>
+    <div><b>${b.speedup}× faster</b><span>${b.time_saved_pct}% less time, same results</span></div>
+    <div><span>Measured with PySpark ${DATA.spark_version || ''} on ${b.rows.toLocaleString('en-IN')} orders (median of 3 runs, local mode).</span></div>`;
+})();
+
+// ---------------- analyser (pattern-based port of sparkopt/analyzer.py)
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const PY_RULES = [
+  [/@\s*(F\.)?udf\b|\budf\s*\(\s*(lambda|[A-Za-z_])/, 'high', 'Python UDF', 'Every row moves between the JVM and Python, and Catalyst cannot optimise it.', 'Use built-in functions from pyspark.sql.functions, or a pandas_udf.'],
+  [/\.collect\s*\(\s*\)/, 'high', 'collect() pulls all rows to the driver', 'Can run the driver out of memory on large data.', 'Use .limit(n).collect(), .take(n), or write the result out.', /\.(limit|agg|count|distinct)\s*\(/],
+  [/\.toPandas\s*\(/, 'high', 'toPandas() on a Spark DataFrame', 'Converts everything on the driver.', 'Aggregate or limit first; enable Arrow.'],
+  [/\.crossJoin\s*\(/, 'high', 'Cartesian crossJoin', 'Rows multiply: left × right.', 'Join on a key.'],
+  [/\.groupByKey\s*\(/, 'high', 'RDD groupByKey', 'Ships every value across the network.', 'Use reduceByKey or DataFrame groupBy().agg().'],
+  [/\.(repartition|coalesce)\s*\(\s*1\s*\)/, 'medium', 'Single partition', 'One task does all the work.', 'Keep several partitions; coalesce only at the very end if needed.'],
+  [/\.(orderBy|sort)\s*\(/, 'medium', 'Global sort', 'A full sort shuffles every row.', 'Use .orderBy(...).limit(n) for top-N.', /\.(orderBy|sort)\s*\((?:[^()]|\([^()]*\))*\)\s*\.(limit|take|head)\s*\(/],
+  [/\.join\s*\((?![^)]*broadcast)/, 'low', 'Check whether this join can be broadcast', 'A shuffle join moves the large table over the network.', 'Wrap the small side: df.join(F.broadcast(small), "key").'],
+  [/adaptive\.enabled["']\s*,\s*["']false/, 'medium', 'Adaptive Query Execution turned off', 'AQE merges tiny partitions and fixes skew at runtime.', 'Leave spark.sql.adaptive.enabled=true.'],
+  [/autoBroadcastJoinThreshold["']\s*,\s*["']-1/, 'low', 'Automatic broadcast joins disabled', 'Small tables get shuffled instead of broadcast.', 'Remove the setting or raise the threshold.'],
+  [/shuffle\.partitions["']\s*,\s*["']200["']/, 'low', 'Shuffle partitions left at 200', 'Wrong for most data sizes.', 'Size it at about 128 MB per partition (see the optimizer tab).'],
+  [/inferSchema\s*=\s*True/, 'low', 'inferSchema=True', 'Reads the data an extra time.', 'Pass an explicit schema or use Parquet.'],
+];
+const SQL_RULES = [
+  [/\bselect\s+\*/i, 'medium', 'SELECT *', 'Reads every column; loses column pruning.', 'List only the columns you need.'],
+  [/\bcross\s+join\b/i, 'high', 'CROSS JOIN', 'Every combination of rows.', 'Join on a key.'],
+  [/\bfrom\s+\w+(\s+\w+)?\s*,\s*\w+/i, 'high', 'Comma join (FROM a, b)', 'Easy to forget the condition and get a cross join.', 'Use explicit JOIN ... ON.'],
+  [/\bnot\s+in\s*\(\s*select\b/i, 'medium', 'NOT IN (subquery)', 'Surprising NULL handling and slow plans.', 'Use NOT EXISTS or LEFT ANTI JOIN.'],
+  [/\bunion\b(?!\s+all)/i, 'low', 'UNION instead of UNION ALL', 'Removing duplicates adds a shuffle.', 'Use UNION ALL if possible.'],
+  [/\b(year|month|to_date|substr|cast|lower|upper)\s*\(/i, 'medium', 'Function on a filtered column', 'Can stop partition pruning.', 'Filter on the raw column with a range.', null, /\bwhere\b/i],
+  [/\blike\s+'%/i, 'low', "LIKE with a leading %", 'Cannot use data skipping.', 'Avoid leading wildcards.'],
+  [/\bcount\s*\(\s*distinct\b/i, 'low', 'COUNT(DISTINCT ...)', 'Needs a large shuffle.', 'Use approx_count_distinct() if an estimate is fine.'],
+];
+function analyse(code) {
+  const isSql = /^\s*(--.*\n\s*)*(select|with|insert|create)\b/i.test(code);
+  const lines = code.split('\n'), out = [];
+  let inWhere = false, loopIndent = -1;
+  const cached = new Set(), actions = {}; let depth = 0, current = null;
+  lines.forEach((raw, i) => {
+    const line = isSql ? raw.replace(/--.*$/, '').replace(/'(?:[^']|'')*'/g, m => m.startsWith("'%") ? "'%'" : "''")
+                       : raw.replace(/#.*$/, '').replace(/(["'])(?:(?!\1).)*\1/g, m => /adaptive|Broadcast|partitions|^["'](false|-1|200)["']$/.test(m) ? m : '""');
+    if (isSql && /\bwhere\b/i.test(line)) inWhere = true;
+    (isSql ? SQL_RULES : PY_RULES).forEach(([re, sev, title, why, fix, unless, needs]) => {
+      if (re.test(line) && !(unless && unless.test(line)) && !(needs && !inWhere)) out.push({ sev, line: i + 1, title, why, fix });
+    });
+    if (!isSql) {
+      const ind = raw.search(/\S/);
+      if (/^\s*(for|while)\b/.test(line)) loopIndent = ind; else if (ind >= 0 && ind <= loopIndent) loopIndent = -1;
+      if (loopIndent >= 0 && ind > loopIndent) {
+        if (/\.withColumn\s*\(/.test(line)) out.push({ sev: 'medium', line: i + 1, title: 'withColumn() inside a loop', why: 'Plans grow and slow down.', fix: 'Use one .select() or .withColumns({...}).' });
+        if (/\.(count|collect|show)\s*\(/.test(line)) out.push({ sev: 'high', line: i + 1, title: 'Action inside a loop', why: 'Each iteration runs a full job.', fix: 'Compute once outside the loop.' });
+      }
+      // remember which variable a (possibly multi-line) assignment belongs to, so `.cache()` on a later line counts
+      const asg = depth === 0 && line.match(/^\s*(\w+)\s*=(?!=)/); if (asg) current = asg[1];
+      if (current && /\.(cache|persist)\s*\(/.test(line)) cached.add(current);
+      depth += (line.match(/\(/g) || []).length - (line.match(/\)/g) || []).length; if (depth <= 0) { depth = 0; current = null; }
+      for (const a of line.matchAll(/\b(\w+)(?:\.\w+\((?:[^()]|\([^()]*\))*\))*\.(count|collect|show|take|first|toPandas)\s*\(/g))
+        if (!['spark', 'sc'].includes(a[1])) (actions[a[1]] = actions[a[1]] || []).push(i + 1);
+    } else if (/;\s*$/.test(line)) inWhere = false;
+  });
+  if (isSql) {
+    let start = 0;
+    code.split(';').forEach(stmt => {
+      const m = stmt.match(/\border\s+by\b/i);
+      if (m && !/\blimit\s+\d+/i.test(stmt) && !/\bover\s*\(/i.test(stmt))
+        out.push({ sev: 'medium', line: code.slice(0, start + m.index).split('\n').length, title: 'ORDER BY without LIMIT', why: 'A full sort is a global shuffle.', fix: 'Add LIMIT, or drop ORDER BY.' });
+      start += stmt.length + 1;
+    });
+  } else {
+    for (const [v, ls] of Object.entries(actions)) if (ls.length >= 2 && !cached.has(v))
+      out.push({ sev: 'medium', line: ls[1], title: `\`${v}\` is computed ${ls.length} times`, why: 'Each action re-runs the lineage unless cached.', fix: `${v} = ${v}.cache() before the first action.` });
+  }
+  const order = { high: 0, medium: 1, low: 2 };
+  return out.sort((a, b) => order[a.sev] - order[b.sev] || a.line - b.line);
+}
+function renderFindings() {
+  const code = document.getElementById('code').value, fs = analyse(code);
+  const score = Math.max(0, 100 - fs.reduce((s, f) => s + { high: 15, medium: 7, low: 2 }[f.sev], 0));
+  const col = score >= 80 ? 'var(--ok)' : score >= 50 ? 'var(--md)' : 'var(--hi)';
+  document.getElementById('findings').innerHTML =
+    `<div class="score"><b style="color:${col}">${score}</b><span>/ 100 health score · ${fs.length} issue${fs.length === 1 ? '' : 's'}</span></div>` +
+    (fs.length ? fs.map(f => `<div class="finding"><h3><span class="sev ${f.sev}">${f.sev}</span>${esc(f.title)} <span class="ln">line ${f.line}</span></h3>
+      <p>${esc(f.why)}</p><p><b>Fix:</b> ${esc(f.fix)}</p></div>`).join('')
+      : '<p class="note">No common anti-patterns found. If the job is still slow, look for skewed stages and spill in the Spark UI.</p>');
+}
+document.getElementById('run').onclick = renderFindings;
+document.querySelectorAll('[data-sample]').forEach(b => b.onclick = () => {
+  document.getElementById('code').value = DATA.samples[b.dataset.sample]; renderFindings();
+});
+document.getElementById('code').value = DATA.samples.py; renderFindings();
+
+// ---------------- optimizer (port of sparkopt/optimizer.py)
+const PROFILES = { etl: [60, .3], aggregation: [45, .5], join: [30, 1.0], ml: [15, .4] };
+function optimize() {
+  const v = id => Math.max(+document.getElementById(id).value || 0, 0);
+  const nodes = Math.max(v('nodes'), 1), cores = Math.max(v('cores'), 1), mem = Math.max(v('mem'), 2), gb = Math.max(v('gb'), 1), sla = Math.max(v('sla'), 1), job = document.getElementById('job').value;
+  const usable = Math.max(cores - 1, 1), cpe = Math.min(5, usable), epn = Math.max(Math.floor(usable / cpe), 1);
+  const execs = Math.max(nodes * epn - 1, 1), slot = (mem - 1) / epn, over = Math.max(.384, .1 * slot), emem = Math.max(Math.floor(slot - over), 1), total = execs * cpe;
+  const [mbps, ratio] = PROFILES[job], shuffle = gb * ratio;
+  let parts = Math.max(Math.ceil(shuffle * 1024 / 128), total * 2); parts = Math.ceil(parts / total) * total;
+  const minutes = (gb * 1024 / (total * mbps) + shuffle * 1024 / (total * 40)) * 1.15 / 60, ok = minutes <= sla;
+  const need = ok ? nodes : Math.ceil(nodes * minutes / sla);
+  const conf = { 'spark.executor.instances': execs, 'spark.executor.cores': cpe, 'spark.executor.memory': emem + 'g',
+    'spark.executor.memoryOverhead': Math.floor(over * 1024) + 'm', 'spark.sql.shuffle.partitions': parts, 'spark.sql.adaptive.enabled': 'true' };
+  if (job === 'join') conf['spark.sql.autoBroadcastJoinThreshold'] = '64m';
+  const notes = [`${cpe} cores per executor, with 1 core and 1 GB per node kept for the OS.`,
+    `About ${shuffle.toFixed(0)} GB shuffled, so ${parts} partitions keeps each near 128 MB.`];
+  if (job === 'join') notes.push('Tables under 64 MB are broadcast instead of shuffled.');
+  if (!ok) notes.push(`About ${need} nodes would meet the ${sla} min SLA.`);
+  document.getElementById('opOut').innerHTML = `<h2>Recommendation</h2>
+    <p><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'Meets SLA' : 'Misses SLA'}</span> &nbsp;Estimated <b>${minutes.toFixed(1)} min</b> for a ${sla} min SLA</p>
+    <table class="kv">${Object.entries(conf).map(([k, x]) => `<tr><td>${k.replace('spark.', '')}</td><td>${x}</td></tr>`).join('')}</table>
+    <ul class="notes">${notes.map(n => `<li>${n}</li>`).join('')}</ul>
+    <pre>spark-submit \\\n${Object.entries(conf).map(([k, x]) => `  --conf ${k}=${x} \\`).join('\n')}\n  your_job.py</pre>`;
+}
+['nodes', 'cores', 'mem', 'gb', 'job', 'sla'].forEach(id => document.getElementById(id).addEventListener('input', optimize));
+optimize();
+
+// ---------------- capacity planner (port of sparkopt/capacity.py)
+function polyfit(xs, ys) { const n = xs.length, mx = xs.reduce((a, b) => a + b) / n, my = ys.reduce((a, b) => a + b) / n;
+  let sxy = 0, sxx = 0; xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; }); const a = sxy / sxx; return [a, my - a * mx]; }
+function fit(y) {
+  const x = y.map((_, i) => i), split = Math.floor(y.length * .8);
+  const lin = (xs, ys) => { const [a, b] = polyfit(xs, ys); return t => Math.max(a * t + b, 0); };
+  const exp = (xs, ys) => { const [a, b] = polyfit(xs, ys.map(v => Math.log(Math.max(v, 1e-6)))); return t => Math.exp(a * t + b); };
+  const mape = f => { let s = 0; for (let i = split; i < y.length; i++) s += Math.abs((y[i] - f(i)) / Math.max(y[i], 1e-9)); return s / (y.length - split); };
+  const sc = { linear: mape(lin(x.slice(0, split), y.slice(0, split))), exponential: mape(exp(x.slice(0, split), y.slice(0, split))) };
+  const best = sc.linear <= sc.exponential ? 'linear' : 'exponential';
+  return { best, err: sc[best], f: (best === 'linear' ? lin : exp)(x, y) };
+}
+function capacity() {
+  const v = id => +document.getElementById(id).value;
+  const months = Math.min(Math.max(v('months'), 1), 36), ret = Math.max(v('ret'), 1), comp = Math.max(v('comp'), .1), rep = v('rep'), cap = Math.max(v('cap'), 1), warn = Math.min(Math.max(v('warn'), 1), 100) / 100;
+  const hist = DATA.history.values, start = new Date(DATA.history.start + 'T00:00:00Z'), n = hist.length, { best, err, f } = fit(hist);
+  const series = hist.slice(); for (let i = n; i < n + months * 30; i++) series.push(f(i));
+  const prefix = [0]; series.forEach(s => prefix.push(prefix[prefix.length - 1] + s));
+  const stored = i => (prefix[i + 1] - prefix[Math.max(0, i - ret + 1)]) * rep / comp / 1024;
+  const pts = [], day = i => new Date(start.getTime() + i * 864e5).toISOString().slice(0, 10);
+  let warnDay = null, fullDay = null;
+  for (let i = 0; i < series.length; i++) { const s = stored(i); pts.push(s);
+    if (i >= n && !warnDay && s >= cap * warn) warnDay = day(i); if (i >= n && !fullDay && s >= cap) fullDay = day(i); }
+  // chart
+  const W = 560, H = 240, P = 36, maxY = Math.max(cap * 1.1, ...pts), X = i => P + (W - P - 10) * i / (pts.length - 1), Y = s => H - 24 - (H - 40) * s / maxY;
+  const path = (a, b) => pts.slice(a, b).map((s, k) => `${k ? 'L' : 'M'}${X(a + k).toFixed(1)},${Y(s).toFixed(1)}`).join('');
+  const ticks = [0, .25, .5, .75, 1].map(t => Math.round(maxY * t));
+  const end = pts[pts.length - 1];
+  const advice = fullDay ? `Storage fills up on ${fullDay}. Add about ${Math.max((end - cap) * 1.25, 0).toFixed(0)} TB, shorten retention, or tier cold data.`
+    : warnDay ? `Usage passes ${Math.round(warn * 100)}% on ${warnDay}. Plan an expansion before then.`
+    : `Capacity is enough: about ${end.toFixed(1)} TB of ${cap} TB used at the end of the forecast.`;
+  document.getElementById('caOut').innerHTML = `<h2>Forecast</h2>
+    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Stored data over time with capacity line">
+      ${ticks.map(t => `<line x1="${P}" x2="${W - 10}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${P - 6}" y="${Y(t) + 4}" text-anchor="end">${t}</text>`).join('')}
+      <line x1="${P}" x2="${W - 10}" y1="${Y(cap)}" y2="${Y(cap)}" stroke="var(--hi)" stroke-dasharray="5 4"/><text x="${W - 12}" y="${Y(cap) - 5}" text-anchor="end" style="fill:var(--hi)">capacity ${cap} TB</text>
+      <line x1="${P}" x2="${W - 10}" y1="${Y(cap * warn)}" y2="${Y(cap * warn)}" stroke="var(--md)" stroke-dasharray="2 4"/>
+      <path d="${path(0, n)}" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <path d="${path(n - 1, pts.length)}" fill="none" stroke="var(--acc)" stroke-width="2.5" stroke-dasharray="6 4"/>
+      <line x1="${X(n - 1)}" x2="${X(n - 1)}" y1="${Y(0)}" y2="${Y(maxY)}" stroke="var(--line)"/>
+      <text x="${X(n - 1) + 4}" y="${Y(maxY) + 12}">today</text>
+      <text x="${P}" y="${H - 6}">${DATA.history.start}</text><text x="${W - 10}" y="${H - 6}" text-anchor="end">${day(pts.length - 1)}</text>
+    </svg>
+    <table class="kv"><tr><td>Growth model chosen</td><td>${best} (${(err * 100).toFixed(1)}% error)</td></tr>
+      <tr><td>Today's ingestion</td><td>${hist[n - 1].toFixed(0)} GB/day</td></tr>
+      <tr><td>Stored today</td><td>${pts[n - 1].toFixed(1)} TB</td></tr>
+      <tr><td>Stored in ${months} months</td><td>${end.toFixed(1)} TB</td></tr></table>
+    <p class="advice">${advice}</p>`;
+}
+['months', 'ret', 'comp', 'rep', 'cap', 'warn'].forEach(id => document.getElementById(id).addEventListener('input', capacity));
+capacity();
+</script>
+</body>
+</html>
